@@ -16,14 +16,18 @@ else
   libsingularity_dep = dependency('singularity-1.0')
 endif
 
-sources = files(
+agent_sources = files(
   'src/main.vala',
   'src/agent.vala',
+)
+
+helper_sources = files(
+  'src/helper_main.vala',
   'src/auth_dialog.vala',
 )
 
 executable('singularity-polkit-agent',
-  sources: sources,
+  sources: agent_sources,
   vala_args: [
     '--pkg=polkit-agent-1',
     '--pkg=polkit-gobject-1',
@@ -34,11 +38,24 @@ executable('singularity-polkit-agent',
     '-DGETTEXT_PACKAGE="singularity-polkit-agent"',
   ],
   dependencies: [
-    gtk4_dep,
     polkit_gobject_dep,
     polkit_agent_dep,
+  ],
+  install: true,
+  install_dir: get_option('libexecdir')
+)
+
+executable('singularity-polkit-auth-helper',
+  sources: helper_sources,
+  vala_args: [
+    '--pkg=posix',
+  ],
+  c_args: [
+    '-DGETTEXT_PACKAGE="singularity-polkit-agent"',
+  ],
+  dependencies: [
+    gtk4_dep,
     libsingularity_dep,
-    dependency('gee-0.8'),
   ],
   install: true,
   install_dir: get_option('libexecdir')

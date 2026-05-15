@@ -1,11 +1,10 @@
-using Gtk;
 using Singularity.Auth;
 
-public class PolkitAgentApp : Singularity.Application {
+public class PolkitAgentApp : GLib.Application {
     private Singularity.Auth.Agent agent;
 
     public PolkitAgentApp() {
-        base("dev.sinty.PolkitAgent");
+        Object(application_id: "dev.sinty.PolkitAgent", flags: ApplicationFlags.FLAGS_NONE);
     }
 
     protected override void activate() {

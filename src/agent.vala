@@ -1,11 +1,11 @@
 using GLib;
-using Gtk;
 
 namespace Singularity.Auth {
 
     public class Agent : PolkitAgent.Listener {
 
         private GLib.List<void*> registration_handles = new GLib.List<void*>();
+        private string last_auth_error = "";
 
         public void register_agent() {
             // Collect session IDs to register for
@@ -33,7 +33,7 @@ namespace Singularity.Auth {
                     void* h = register(PolkitAgent.RegisterFlags.NONE, subject,
                         "/dev/sinty/PolicyKit1/AuthenticationAgent");
                     registration_handles.append(h);
-                    message("Polkit Agent: registered via UnixProcess (fallback)");
+                    debug("Polkit Agent: registered via UnixProcess (fallback)");
                 } catch (GLib.Error e) {
                     warning("Failed to register Polkit Agent: %s", e.message);
                 }
@@ -46,7 +46,7 @@ namespace Singularity.Auth {
                     void* h = register(PolkitAgent.RegisterFlags.NONE, subject,
                         "/dev/sinty/PolicyKit1/AuthenticationAgent");
                     registration_handles.append(h);
-                    message("Polkit Agent: registered for session %s", sid);
+                    debug("Polkit Agent: registered for session %s", sid);
                 } catch (GLib.Error e) {
                     warning("Failed to register for session %s: %s", sid, e.message);
                 }
@@ -80,7 +80,7 @@ namespace Singularity.Auth {
                     uint32 uid = s.get_child_value(1).get_uint32();
                     if (uid == my_uid) {
                         result_list.add(sid);
-                        message("Polkit Agent: found user session %s", sid);
+                        debug("Polkit Agent: found user session %s", sid);
                     }
                 }
             } catch (GLib.Error e) {
@@ -122,39 +122,23 @@ namespace Singularity.Auth {
                 if (pw != null) user_name = pw.pw_name;
             }
 
-            var app = (Gtk.Application) GLib.Application.get_default();
-            var dialog = new AuthDialog(app, action_id, message, icon_name, user_name);
-
             bool success = false;
-            var loop = new GLib.MainLoop(null, false);
 
-            if (cancellable != null) {
-                cancellable.cancelled.connect(() => {
-                    dialog.close_dialog();
-                    loop.quit();
-                });
+            string error_message = "";
+            while (cancellable == null || !cancellable.is_cancelled()) {
+                string? password = yield prompt_password(action_id, message, icon_name, user_name, error_message, cancellable);
+                if (password == null) break;
+
+                last_auth_error = "";
+                try {
+                    success = yield attempt_auth(cookie, chosen, password);
+                } catch (GLib.Error e) {
+                    warning("Auth error: %s", e.message);
+                    last_auth_error = e.message;
+                }
+                if (success) break;
+                error_message = last_auth_error != "" ? last_auth_error : "Authentication failed. Wrong password?";
             }
-
-            dialog.authenticated.connect((password) => {
-                attempt_auth.begin(cookie, chosen, password, dialog, (obj, res) => {
-                    try {
-                        success = attempt_auth.end(res);
-                    } catch (GLib.Error e) {
-                        warning("Auth error: %s", e.message);
-                    }
-                    if (success) {
-                        dialog.close_dialog();
-                        loop.quit();
-                    }
-                });
-            });
-
-            dialog.cancelled.connect(() => {
-                loop.quit();
-            });
-
-            dialog.open_dialog();
-            loop.run();
 
             if (cancellable != null && cancellable.is_cancelled())
                 throw new GLib.IOError.CANCELLED("Authentication cancelled");
@@ -162,10 +146,26 @@ namespace Singularity.Auth {
             return success;
         }
 
+        private async string? prompt_password(string action_id, string message, string icon_name,
+                                              string user_name, string error_message,
+                                              GLib.Cancellable? cancellable) throws GLib.Error {
+            string exe = GLib.FileUtils.read_link("/proc/self/exe");
+            string helper = GLib.Path.build_filename(GLib.Path.get_dirname(exe), "singularity-polkit-auth-helper");
+            var proc = new Subprocess(
+                SubprocessFlags.STDOUT_PIPE | SubprocessFlags.STDERR_SILENCE,
+                helper, action_id, message, icon_name, user_name, error_message);
+            string? stdout_buf;
+            string? stderr_buf;
+            yield proc.communicate_utf8_async(null, cancellable, out stdout_buf, out stderr_buf);
+            if (!proc.get_successful() || stdout_buf == null) return null;
+            return stdout_buf.chomp();
+        }
+
         private async bool attempt_auth(string cookie, Polkit.Identity? identity,
-                                        string password, AuthDialog dialog) throws GLib.Error {
+                                        string password) throws GLib.Error {
+            last_auth_error = "";
             if (identity == null) {
-                dialog.show_error(_("No identity to authenticate."));
+                last_auth_error = "No identity to authenticate.";
                 return false;
             }
 
@@ -177,12 +177,12 @@ namespace Singularity.Auth {
             });
 
             session.show_error.connect((text) => {
-                dialog.show_error(text);
+                last_auth_error = text;
             });
 
             session.completed.connect((ok) => {
                 gained = ok;
-                if (!ok) dialog.show_error(_("Authentication failed. Wrong password?"));
+                if (!ok && last_auth_error == "") last_auth_error = "Authentication failed. Wrong password?";
                 attempt_auth.callback();
             });
 
