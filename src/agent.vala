@@ -26,7 +26,7 @@ namespace Singularity.Auth {
             }
 
             if (session_ids.length == 0) {
-                // Last resort: register by process
+                // FIXME: Last resort: register by process
                 try {
                     var subject = new Polkit.UnixProcess.for_owner(
                         (int) Posix.getpid(), 0, (int) Posix.getuid());
