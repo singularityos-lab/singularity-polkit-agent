@@ -9,7 +9,9 @@ public class PolkitAuthHelperApp : Singularity.Application {
     private string error_message;
 
     public PolkitAuthHelperApp(string[] args) {
-        base("dev.sinty.PolkitAuthHelper");
+        // NON_UNIQUE: each pkexec prompt is a separate process; they must not
+        // forward activate() to each other through the D-Bus singleton mechanism.
+        base("dev.sinty.PolkitAuthHelper", ApplicationFlags.NON_UNIQUE);
         action_id = args.length > 1 ? args[1] : "";
         auth_message = args.length > 2 ? args[2] : "Authentication required";
         icon_name = args.length > 3 ? args[3] : "";
@@ -37,6 +39,8 @@ public class PolkitAuthHelperApp : Singularity.Application {
 
     public static int main(string[] args) {
         var app = new PolkitAuthHelperApp(args);
-        return app.run(args);
+        // Pass only argv[0] so GLib.Application doesn't see action/message args
+        // as files and trigger the "can not open files" critical error.
+        return app.run({args[0]});
     }
 }
