@@ -1,0 +1,5 @@
+# List of source files containing translatable strings.
+src/agent.vala
+src/auth_dialog.vala
+src/helper_main.vala
+src/main.vala

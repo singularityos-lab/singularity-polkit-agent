@@ -11,7 +11,7 @@ public class PolkitAuthHelperApp : Singularity.Application {
     public PolkitAuthHelperApp(string[] args) {
         // NON_UNIQUE: each pkexec prompt is a separate process; they must not
         // forward activate() to each other through the D-Bus singleton mechanism.
-        base("dev.sinty.PolkitAuthHelper", ApplicationFlags.NON_UNIQUE);
+        base(_("dev.sinty.PolkitAuthHelper"), ApplicationFlags.NON_UNIQUE);
         action_id = args.length > 1 ? args[1] : "";
         auth_message = args.length > 2 ? args[2] : "Authentication required";
         icon_name = args.length > 3 ? args[3] : "";
@@ -38,6 +38,16 @@ public class PolkitAuthHelperApp : Singularity.Application {
     }
 
     public static int main(string[] args) {
+        Intl.setlocale(GLib.LocaleCategory.ALL, "");
+        string locale_dir = "/usr/share/locale";
+        try {
+            string exe = GLib.FileUtils.read_link("/proc/self/exe");
+            locale_dir = GLib.Path.build_filename(GLib.Path.get_dirname(GLib.Path.get_dirname(exe)), "share", "locale");
+        } catch (GLib.Error e) { }
+        Intl.bindtextdomain("singularity-polkit-agent", locale_dir);
+        Intl.bind_textdomain_codeset("singularity-polkit-agent", "UTF-8");
+        Intl.textdomain("singularity-polkit-agent");
+
         var app = new PolkitAuthHelperApp(args);
         // Pass only argv[0] so GLib.Application doesn't see action/message args
         // as files and trigger the "can not open files" critical error.

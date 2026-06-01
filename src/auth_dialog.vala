@@ -43,7 +43,7 @@ namespace Singularity.Auth {
             icon.add_css_class("dim-label");
             box.append(icon);
 
-            var title = new Label("Authentication Required");
+            var title = new Label(_("Authentication Required"));
             title.add_css_class("title-2");
             box.append(title);
 
@@ -54,7 +54,7 @@ namespace Singularity.Auth {
             msg.add_css_class("dim-label");
             box.append(msg);
 
-            var user_lbl = new Label("Password for <b>%s</b>".printf(user_name));
+            var user_lbl = new Label(_("Password for <b>%s</b>").printf(user_name));
             user_lbl.use_markup = true;
             user_lbl.add_css_class("caption");
             user_lbl.add_css_class("dim-label");
@@ -76,7 +76,7 @@ namespace Singularity.Auth {
             btn_box.halign = Align.CENTER;
             box.append(btn_box);
 
-            var cancel_btn = new Button.with_label("Cancel");
+            var cancel_btn = new Button.with_label(_("Cancel"));
             cancel_btn.add_css_class("pill");
             cancel_btn.width_request = 120;
             cancel_btn.clicked.connect(() => {
@@ -85,7 +85,7 @@ namespace Singularity.Auth {
             });
             btn_box.append(cancel_btn);
 
-            auth_btn = new Button.with_label("Authenticate");
+            auth_btn = new Button.with_label(_("Authenticate"));
             auth_btn.add_css_class("pill");
             auth_btn.add_css_class("suggested-action");
             auth_btn.width_request = 140;
