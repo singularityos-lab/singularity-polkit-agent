@@ -124,6 +124,9 @@ namespace Singularity.Auth {
             });
             anim.play();
             present();
+            // Focus the password field immediately so the user can type right
+            // away instead of waiting for the open animation to finish.
+            password_entry.grab_focus();
         }
 
         public override void close_dialog() {
