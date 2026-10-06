@@ -2,10 +2,37 @@ using GLib;
 
 namespace Singularity.Auth {
 
+    [DBus (name = "dev.sinty.PolkitAgent.Authentication")]
+    public class AuthenticationState : Object {
+        private int active = 0;
+
+        public bool authenticating {
+            get { return active > 0; }
+        }
+
+        public signal void authenticating_changed(bool authenticating);
+
+        [DBus (visible = false)]
+        public void hold() {
+            active++;
+            if (active == 1) authenticating_changed(true);
+        }
+
+        [DBus (visible = false)]
+        public void release() {
+            active--;
+            if (active == 0) authenticating_changed(false);
+        }
+    }
+
     public class Agent : PolkitAgent.Listener {
 
         private GLib.List<void*> registration_handles = new GLib.List<void*>();
-        private string last_auth_error = "";
+        private AuthenticationState state;
+
+        public Agent(AuthenticationState state) {
+            this.state = state;
+        }
 
         public void register_agent() {
             // Collect session IDs to register for
@@ -98,6 +125,17 @@ namespace Singularity.Auth {
             GLib.List<Polkit.Identity> identities,
             GLib.Cancellable? cancellable = null) throws GLib.Error {
 
+            state.hold();
+            try {
+                return yield authenticate(action_id, message, icon_name, cookie, identities, cancellable);
+            } finally {
+                state.release();
+            }
+        }
+
+        private async bool authenticate(string action_id, string message, string icon_name, string cookie,
+                                        GLib.List<Polkit.Identity> identities,
+                                        GLib.Cancellable? cancellable) throws GLib.Error {
             debug("BeginAuthentication: %s", action_id);
 
             // Pick best identity: prefer current user, fallback to first
@@ -122,74 +160,11 @@ namespace Singularity.Auth {
                 if (pw != null) user_name = pw.pw_name;
             }
 
-            bool success = false;
+            if (chosen == null)
+                throw new Polkit.Error.FAILED("No identity to authenticate");
 
-            string error_message = "";
-            while (cancellable == null || !cancellable.is_cancelled()) {
-                string? password = yield prompt_password(action_id, message, icon_name, user_name, error_message, cancellable);
-                if (password == null) break;
-
-                last_auth_error = "";
-                try {
-                    success = yield attempt_auth(cookie, chosen, password);
-                } catch (GLib.Error e) {
-                    warning("Auth error: %s", e.message);
-                    last_auth_error = e.message;
-                }
-                if (success) break;
-                error_message = last_auth_error != "" ? last_auth_error : "Authentication failed. Wrong password?";
-            }
-
-            if (cancellable != null && cancellable.is_cancelled())
-                throw new GLib.IOError.CANCELLED("Authentication cancelled");
-
-            return success;
-        }
-
-        private async string? prompt_password(string action_id, string message, string icon_name,
-                                              string user_name, string error_message,
-                                              GLib.Cancellable? cancellable) throws GLib.Error {
-            string exe = GLib.FileUtils.read_link("/proc/self/exe");
-            string helper = GLib.Path.build_filename(GLib.Path.get_dirname(exe), "singularity-polkit-auth-helper");
-            var proc = new Subprocess(
-                SubprocessFlags.STDOUT_PIPE | SubprocessFlags.STDERR_SILENCE,
-                helper, action_id, message, icon_name, user_name, error_message);
-            string? stdout_buf;
-            string? stderr_buf;
-            yield proc.communicate_utf8_async(null, cancellable, out stdout_buf, out stderr_buf);
-            if (!proc.get_successful() || stdout_buf == null) return null;
-            return stdout_buf.chomp();
-        }
-
-        private async bool attempt_auth(string cookie, Polkit.Identity? identity,
-                                        string password) throws GLib.Error {
-            last_auth_error = "";
-            if (identity == null) {
-                last_auth_error = "No identity to authenticate.";
-                return false;
-            }
-
-            bool gained = false;
-            var session = new PolkitAgent.Session(identity, cookie);
-
-            session.request.connect((request_text, echo_on) => {
-                session.response(password);
-            });
-
-            session.show_error.connect((text) => {
-                last_auth_error = text;
-            });
-
-            session.completed.connect((ok) => {
-                gained = ok;
-                if (!ok && last_auth_error == "") last_auth_error = "Authentication failed. Wrong password?";
-                attempt_auth.callback();
-            });
-
-            session.initiate();
-            yield;
-
-            return gained;
+            var flow = new AuthFlow(action_id, message, icon_name, user_name, cookie, chosen, cancellable);
+            return yield flow.run();
         }
     }
 }

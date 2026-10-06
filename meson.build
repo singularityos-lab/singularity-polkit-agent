@@ -19,6 +19,8 @@ endif
 agent_sources = files(
   'src/main.vala',
   'src/agent.vala',
+  'src/auth_flow.vala',
+  'src/fingerprint.vala',
 )
 
 helper_sources = files(
@@ -49,12 +51,14 @@ executable('singularity-polkit-auth-helper',
   sources: helper_sources,
   vala_args: [
     '--pkg=posix',
+    '--pkg=gio-unix-2.0',
   ],
   c_args: [
     '-DGETTEXT_PACKAGE="singularity-polkit-agent"',
   ],
   dependencies: [
     gtk4_dep,
+    dependency('gio-unix-2.0'),
     libsingularity_dep,
   ],
   install: true,
