@@ -56,7 +56,9 @@ executable('singularity-polkit-auth-helper',
   c_args: [
     '-DGETTEXT_PACKAGE="singularity-polkit-agent"',
   ],
+  link_args: ['-Wl,--push-state,--no-as-needed', '-lgtk4-layer-shell', '-Wl,--pop-state'],
   dependencies: [
+    dependency('gtk4-layer-shell-0'),
     gtk4_dep,
     dependency('gio-unix-2.0'),
     libsingularity_dep,
