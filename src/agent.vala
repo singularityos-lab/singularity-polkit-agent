@@ -1,5 +1,8 @@
 using GLib;
 
+[CCode (cname = "polkit_unix_session_new_for_process_sync")]
+extern Polkit.Subject? polkit_session_for_process(int pid, GLib.Cancellable? cancellable) throws GLib.Error;
+
 namespace Singularity.Auth {
 
     [DBus (name = "dev.sinty.PolkitAgent.Authentication")]
@@ -41,6 +44,19 @@ namespace Singularity.Auth {
             string? env_session = GLib.Environment.get_variable("XDG_SESSION_ID");
             if (env_session != null && env_session != "")
                 session_ids.add(env_session);
+
+            try {
+                var own = polkit_session_for_process((int) Posix.getpid(), null) as Polkit.UnixSession;
+                if (own != null) {
+                    string sid = own.get_session_id();
+                    bool known = false;
+                    foreach (string existing in session_ids)
+                        if (existing == sid) { known = true; break; }
+                    if (!known) session_ids.add(sid);
+                }
+            } catch (GLib.Error e) {
+                debug("Polkit Agent: no session for this process: %s", e.message);
+            }
 
             // Enumerate all logind sessions for this user (needed in container where
             // host-spawn processes may be in a different session than the graphical one)
